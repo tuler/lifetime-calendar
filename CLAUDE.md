@@ -97,6 +97,30 @@ so there is one dev server rather than two.
   the OS calendar. Over a local http dev server that can't work, so the button
   falls back to the plain URL and says so.
 
+### Palette
+
+Taken from Life Time's own stylesheets, not invented. Don't substitute
+arbitrary colours:
+
+| Token | Light | Dark | Source |
+| --- | --- | --- | --- |
+| accent | `#0078aa` | `#00cbed` | their `.btn-primary` / outline button |
+| accent hover | `#005477` | `#5ee8ff` | same sheets |
+| surface / bg | `#ffffff` / `#f5f5f5` | `#002b3d` / `#001a24` | neutrals + `#003044` navy |
+| muted | `#707070` | `#a2aaad` | neutral; dark is the logo gray |
+| rule | `#e8e8e8` | `#004663` | neutrals / navy |
+| danger | `#c93325` | `#ff9b90` | their error red |
+
+Keep the UI sparse: the wordmark, a heading, the controls, and a single line of
+fine print. Prefer an icon over a sentence. Everything in
+`src/client/icons.tsx` is inline SVG so the client stays dependency-free,
+including Life Time's wordmark, copied from their own `life-time-logo-xs.svg`
+and filled with `currentColor`. Don't hotlink their CDN for it.
+
+Write for a family member, not an engineer. "Encrypted" is fine and understood;
+avoid the deeper jargon ("key", "token", "AES", "ciphertext"). Name the
+credentials as Life Time's, since people have many logins.
+
 ## Next steps
 
 1. Run one real sign-in end to end and capture the authenticated

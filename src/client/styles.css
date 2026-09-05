@@ -1,28 +1,32 @@
+/* Palette lifted from Life Time's own stylesheets:
+   #0078aa primary, #00cbed dark-mode accent, #003044/#004663 navy,
+   #A2AAAD the logo gray, #151515/#707070/#e8e8e8/#f5f5f5 neutrals. */
+
 :root {
-  --bg: #eceeef;
+  --bg: #f5f5f5;
   --surface: #ffffff;
-  --ink: #1c2023;
-  --muted: #6b7378;
-  --rule: #d3d7d9;
-  --accent: #17594a;
-  --accent-hover: #114539;
+  --ink: #151515;
+  --muted: #707070;
+  --rule: #e8e8e8;
+  --accent: #0078aa;
+  --accent-hover: #005477;
   --accent-ink: #ffffff;
-  --danger: #8c2f22;
-  --focus: #17594a;
+  --accent-wash: #e8f4f9;
+  --danger: #c93325;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16191b;
-    --surface: #1f2325;
-    --ink: #e8eaeb;
-    --muted: #9aa3a8;
-    --rule: #333a3d;
-    --accent: #4bb397;
-    --accent-hover: #5cc4a8;
-    --accent-ink: #0f1415;
-    --danger: #e08072;
-    --focus: #4bb397;
+    --bg: #001a24;
+    --surface: #002b3d;
+    --ink: #eaf2f5;
+    --muted: #a2aaad;
+    --rule: #004663;
+    --accent: #00cbed;
+    --accent-hover: #5ee8ff;
+    --accent-ink: #00212e;
+    --accent-wash: #003c54;
+    --danger: #ff9b90;
   }
 }
 
@@ -42,47 +46,91 @@ body {
   justify-content: center;
   background: var(--bg);
   color: var(--ink);
-  font: 17px/1.55 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
-    serif;
+  font: 17px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
     max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
 
-.wrap {
+.card {
   width: 100%;
-  max-width: 30rem;
+  max-width: 25rem;
   background: var(--surface);
   border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: clamp(22px, 6vw, 30px);
+}
+
+/* Life Time's wordmark, sitting above both screens as the brand header. */
+.logo {
+  display: block;
+  width: 84px;
+  height: auto;
+  margin-bottom: 1.3rem;
+  color: var(--muted);
+}
+
+/* Success tile. The wordmark carries the brand, so the form needs no tile. */
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 1.1rem;
   border-radius: 12px;
-  padding: clamp(20px, 5vw, 32px);
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.mark svg {
+  width: 24px;
+  height: 24px;
+}
+
+.mark.done {
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 h1 {
-  font-size: clamp(1.35rem, 5vw, 1.7rem);
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.35rem;
   text-wrap: balance;
 }
 
 .lede {
-  margin: 0 0 1.6rem;
+  margin: 0 0 1.5rem;
   color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* No lede on the success screen, so the button needs the breathing room. */
+.mark.done ~ h1 {
+  margin-bottom: 1.3rem;
+}
+
+/* Two stacked marks would be busy; the tile carries its own top spacing. */
+.logo + .mark {
+  margin-top: 0.2rem;
 }
 
 form {
   display: grid;
-  gap: 1.1rem;
+  gap: 0.9rem;
 }
 
 label {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 label span {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 500;
   color: var(--muted);
 }
 
@@ -92,17 +140,17 @@ input {
   font-size: max(16px, 1rem);
   width: 100%;
   min-height: 48px;
-  padding: 0.6rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 input:focus-visible,
 .btn:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -110,18 +158,25 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.5rem;
   width: 100%;
   min-height: 50px;
+  margin-top: 0.15rem;
   padding: 0.7rem 1rem;
   font: inherit;
   font-size: 1rem;
-  text-align: center;
+  font-weight: 550;
   text-decoration: none;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
-  /* Avoid the iOS tap-highlight flash on the anchor styled as a button. */
   -webkit-tap-highlight-color: transparent;
+}
+
+.btn svg {
+  width: 19px;
+  height: 19px;
+  flex: none;
 }
 
 .btn.primary {
@@ -139,7 +194,7 @@ summary:focus-visible {
 }
 
 .btn.secondary {
-  margin-top: 0.7rem;
+  margin-top: 0.6rem;
   background: transparent;
   color: var(--accent);
   border-color: var(--rule);
@@ -152,49 +207,69 @@ summary:focus-visible {
 .error {
   margin: 0;
   color: var(--danger);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
-.fine {
-  font-size: 0.85rem;
-  line-height: 1.5;
+.hint {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
   color: var(--muted);
 }
 
-.wrap > .fine:last-child {
-  margin: 1.5rem 0 0;
-  padding-top: 1.2rem;
+/* Fine print is one line with a lock, not a paragraph. */
+.fine {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.4rem 0 0;
+  padding-top: 1.1rem;
   border-top: 1px solid var(--rule);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
-.note {
-  margin: 1rem 0 0;
+.fine svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
 }
 
 details {
-  margin-top: 1.5rem;
-  border-top: 1px solid var(--rule);
-  padding-top: 1rem;
+  margin-top: 1.3rem;
 }
 
 summary {
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--accent);
-  /* Comfortable touch target without shifting the disclosure marker. */
-  padding: 0.35rem 0;
+  padding: 0.3rem 0;
 }
 
-.details-body > .fine {
-  margin: 0.6rem 0;
+.steps {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 0.7rem;
+  margin: 0.7rem 0 0;
+  font-size: 0.8rem;
+}
+
+.steps dt {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.steps dd {
+  margin: 0;
+  color: var(--muted);
 }
 
 code {
   display: block;
   margin-top: 0.8rem;
-  padding: 0.7rem;
-  font: 0.78rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--ink);
+  padding: 0.6rem;
+  font: 0.74rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
   background: var(--bg);
   border: 1px solid var(--rule);
   border-radius: 8px;

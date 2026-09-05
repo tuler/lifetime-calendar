@@ -1,4 +1,11 @@
 import { useState, type FormEvent } from "react";
+import {
+  CalendarIcon,
+  CheckIcon,
+  CopyIcon,
+  LifeTimeLogo,
+  LockIcon,
+} from "./icons";
 
 interface Links {
   /** `webcal://…` — what the Subscribe button opens. */
@@ -15,7 +22,8 @@ export function App() {
   const [links, setLinks] = useState<Links | null>(null);
 
   return (
-    <main className="wrap">
+    <main className="card">
+      <LifeTimeLogo />
       {links ? <Ready links={links} /> : <SignUp onDone={setLinks} />}
     </main>
   );
@@ -56,13 +64,10 @@ function SignUp({ onDone }: { onDone: (links: Links) => void }) {
 
   return (
     <>
-      <h1>Put your Life Time classes on your calendar</h1>
-      <p className="lede">
-        Sign in once and you&rsquo;ll get a calendar that keeps itself up to
-        date.
-      </p>
+      <h1>Your classes, on your calendar</h1>
+      <p className="lede">Sign in once. New bookings appear on their own.</p>
 
-      <form onSubmit={submit} noValidate={false}>
+      <form onSubmit={submit}>
         <label>
           <span>Life Time username or email</span>
           <input
@@ -100,9 +105,11 @@ function SignUp({ onDone }: { onDone: (links: Links) => void }) {
       </form>
 
       <p className="fine">
-        Your password is encrypted with a key that exists only inside your
-        calendar link. It is kept so classes you book later appear without you
-        signing in again.
+        <LockIcon />
+        <span>
+          Your password is encrypted before it&rsquo;s saved, and only your link
+          can unlock it.
+        </span>
       </p>
     </>
   );
@@ -112,52 +119,44 @@ function Ready({ links }: { links: Links }) {
   // `webcal://` is handed to the OS, which fetches over TLS. A local http dev
   // server can't serve that, so point the button at the plain URL instead.
   const local = links.direct.startsWith("http://");
-  const subscribeHref = local ? links.direct : links.webcal;
 
   return (
     <>
-      <h1>Your calendar is ready</h1>
-      <p className="lede">
-        Subscribe once. New bookings show up on their own.
-      </p>
+      <span className="mark done" aria-hidden="true">
+        <CheckIcon />
+      </span>
 
-      <a className="btn primary" href={subscribeHref}>
-        Add to Calendar
+      <h1>Calendar ready</h1>
+
+      <a className="btn primary" href={local ? links.direct : links.webcal}>
+        <CalendarIcon />
+        <span>Add to Calendar</span>
       </a>
 
       <CopyLink url={links.direct} />
 
       {local && (
-        <p className="fine note">
-          You&rsquo;re on a local dev server, so the button opens the plain
-          address rather than handing it to Calendar. Deployed over https it
-          subscribes directly.
+        <p className="hint">
+          Local dev server, so this opens the address rather than Calendar.
         </p>
       )}
 
       <details>
-        <summary>Add it by hand instead</summary>
-        <div className="details-body">
-          <p className="fine">
-            <strong>iPhone or iPad:</strong> Settings &rsaquo; Apps &rsaquo;
-            Calendar &rsaquo; Accounts &rsaquo; Add Account &rsaquo; Other
-            &rsaquo; Add Subscribed Calendar.
-          </p>
-          <p className="fine">
-            <strong>Mac:</strong> Calendar &rsaquo; File &rsaquo; New Calendar
-            Subscription.
-          </p>
-          <p className="fine">
-            <strong>Google Calendar:</strong> Other calendars &rsaquo; From URL.
-          </p>
-          <code>{links.direct}</code>
-        </div>
+        <summary>Add it manually</summary>
+        <dl className="steps">
+          <dt>iPhone</dt>
+          <dd>Settings › Apps › Calendar › Accounts › Add › Other</dd>
+          <dt>Mac</dt>
+          <dd>Calendar › File › New Calendar Subscription</dd>
+          <dt>Google</dt>
+          <dd>Other calendars › From URL</dd>
+        </dl>
+        <code>{links.direct}</code>
       </details>
 
       <p className="fine">
-        Save this link somewhere. It is the only copy of the key that unlocks
-        your stored password, so it cannot be shown again, and anyone holding it
-        can see your class schedule.
+        <LockIcon />
+        <span>Save this link. It can&rsquo;t be shown again.</span>
       </p>
     </>
   );
@@ -178,11 +177,14 @@ function CopyLink({ url }: { url: string }) {
 
   return (
     <button type="button" className="btn secondary" onClick={copy}>
-      {state === "ok"
-        ? "Link copied"
-        : state === "fail"
-          ? "Press and hold the link below to copy"
-          : "Copy link"}
+      {state === "ok" ? <CheckIcon /> : <CopyIcon />}
+      <span>
+        {state === "ok"
+          ? "Copied"
+          : state === "fail"
+            ? "Copy failed — use the link below"
+            : "Copy link"}
+      </span>
     </button>
   );
 }
