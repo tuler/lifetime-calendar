@@ -25,12 +25,12 @@ strangers.
 ## Setup
 
 ```sh
-npm install
-npx wrangler kv namespace create FEEDS
-npx wrangler kv namespace create FEEDS --preview
+bun install
+bunx wrangler kv namespace create FEEDS
+bunx wrangler kv namespace create FEEDS --preview
 # paste both ids into wrangler.toml
-npm run dev
-npm run deploy
+bun run dev
+bun run deploy
 ```
 
 Set `SIGNUPS_OPEN = "0"` in `wrangler.toml` and redeploy once everyone has

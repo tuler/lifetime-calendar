@@ -12,7 +12,7 @@ Users: the author plus friends and family, so roughly five accounts.
 
 Complete and typechecking, except `login()` and `getReservations()` in
 `src/lifetime.ts`, which throw `UpstreamError` until the real endpoints are
-filled in from a DevTools capture. `npm test` covers `ics.ts` and `crypto.ts`.
+filled in from a DevTools capture. `bun run test` covers `ics.ts` and `crypto.ts`.
 
 ## Design decisions worth preserving
 
@@ -38,7 +38,7 @@ filled in from a DevTools capture. `npm test` covers `ics.ts` and `crypto.ts`.
   there's a strong reason.
 - Errors the user might see get plain-language messages; internal failures get
   status codes and nothing else.
-- Run `npm run typecheck` and `npm test` before committing.
+- Run `bun run typecheck` and `bun run test` before committing.
 
 ## Next steps
 
