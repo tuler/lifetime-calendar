@@ -17,20 +17,37 @@ calls have no unit tests yet and haven't been exercised with real credentials.
 
 ## Auth (reverse-engineered Sept 2026)
 
-Sign-in is delegated to **Azure AD B2C** — the "Microsoft Authentication" you
-saw. The website itself uses an interactive MSAL redirect
-(`B2C_1A_WebUsernameSignIn`), useless to a headless Worker. The same tenant also
-exposes a **ROPC** policy, `B2C_1A_ROPCSignIn`, which takes username + password
-in one form POST and returns tokens — that's what `login()` uses.
+The **website's** sign-in is Azure AD B2C — the "Microsoft Authentication" that
+makes the request hard to spot in DevTools. It's an interactive MSAL redirect,
+so it's useless to a headless Worker. Don't try to drive it.
 
-- Token URL: `https://auth.lifetime.life/prdltmembersb2c.onmicrosoft.com/b2c_1a_ropcsignin/oauth2/v2.0/token`
-- Public client id `27e53cd6-9054-444f-bdfa-b341dcb7263d`, scope `openid offline_access https://prdltmembersb2c.onmicrosoft.com/27e53cd6-.../read`.
-- The id_token carries Life Time claims `LTF_SSOID` and `LTF_AccessToken`, which
-  become the `X-LTF-SSOID` and `X-LTF-CT` headers on the API call.
+Underneath, the same API gateway still exposes the older first-party auth
+service, which the site's own framework bundle calls directly. That is what
+`login()` uses, and it's one plain JSON round trip:
+
+- `POST https://api.lifetimefitness.com/auth/v2/login` with
+  `{"username": ..., "password": ...}` and an `Ocp-Apim-Subscription-Key`
+  header → `{"ssoId": ..., "message": "Success", "token": ..., "status": "0"}`.
+- Omit the optional `type` field. It's a `LoginSessionType` enum and any string
+  guess 400s; the site omits it too.
+- `token` → `X-LTF-CT`, `ssoId` → `X-LTF-SSOID` on every subsequent API call.
 - Reservations: `GET https://api.lifetimefitness.com/ux/web-schedules/v3/reservations`
-  behind Azure API Management, needing a static `ocp-apim-subscription-key`
-  (`924c03ce...`, from the page config, not a secret) plus the two headers above.
-  Returns `{ results: [...] }`. Confirmed 401 without a valid SSO id.
+  behind Azure API Management, needing the subscription key (`924c03ce...`,
+  from the page config, not a secret) plus those two headers. Returns
+  `{ results: [...] }`. Confirmed 401 without a valid session.
+- `memberId` scopes the reservations query; `login()` gets it from
+  `GET user-profile/api` (with `X-LTF-CT`) as a best-effort step.
+
+**Fallback if the legacy service is retired:** the B2C tenant also has a ROPC
+policy, `B2C_1A_ROPCSignIn`, that works headlessly — POST `grant_type=password`
+with client id `27e53cd6-9054-444f-bdfa-b341dcb7263d` to
+`https://auth.lifetime.life/prdltmembersb2c.onmicrosoft.com/b2c_1a_ropcsignin/oauth2/v2.0/token`.
+Its id_token carries the same two values as the `LTF_SSOID` and
+`LTF_AccessToken` claims. The recipe is in the header comment of `lifetime.ts`.
+
+`scripts/probe-login.mjs` exercises this whole chain with real credentials from
+the environment and prints the result with tokens redacted. Delete it once the
+reservation field names are confirmed.
 
 ## Design decisions worth preserving
 

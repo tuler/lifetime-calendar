@@ -21,13 +21,11 @@ export interface Reservation {
 }
 
 export interface Session {
-  /** Raw B2C id_token. Kept for debugging; requests use the fields below. */
+  /** Session token — the site's `lt-authentication` value, sent as `X-LTF-CT`. */
   token: string;
-  /** `LTF_SSOID` claim → the `X-LTF-SSOID` request header. */
+  /** The account's SSO id, sent as `X-LTF-SSOID`. */
   sso: string;
-  /** `LTF_AccessToken` claim → the `X-LTF-CT` request header. */
-  authToken: string;
-  /** `memberId` claim, used to scope the reservations query. May be absent. */
+  /** Scopes the reservations query. Best-effort; may be absent. */
   memberId: string | null;
   /** Epoch millis. */
   expiresAt: number;

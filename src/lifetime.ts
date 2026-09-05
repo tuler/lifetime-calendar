@@ -1,5 +1,4 @@
 import type { Reservation, Session } from "./types";
-import { b64urlDecode } from "./crypto";
 
 // ---------------------------------------------------------------------------
 // Life Time adapter.
@@ -9,65 +8,69 @@ import { b64urlDecode } from "./crypto";
 //
 // How login works (captured from my.lifetime.life, Sept 2026):
 //
-// The site delegates sign-in to Azure AD B2C ("Microsoft Authentication").
-// The browser uses an interactive redirect (MSAL) against the
-// `B2C_1A_WebUsernameSignIn` policy, which is no use to a headless Worker.
-// But the same B2C tenant also exposes a **ROPC** policy
-// (`B2C_1A_ROPCSignIn`) — Resource Owner Password Credentials — which accepts
-// username + password in a single form POST and returns tokens directly. That
-// is what we use here.
+// The website's own sign-in page delegates to Azure AD B2C — the "Microsoft
+// Authentication" you see in DevTools. That flow is an interactive MSAL
+// redirect, useless to a headless Worker.
 //
-// The id_token that comes back carries two Life Time-specific claims:
-//   - `LTF_SSOID`        → sent onward as the `X-LTF-SSOID` header
-//   - `LTF_AccessToken`  → sent onward as the `X-LTF-CT`  header
-// The reservations API sits behind Azure API Management and additionally wants
-// a static subscription key (not a secret — it ships in the page's config).
+// Underneath it, though, the same API gateway still exposes the older
+// first-party auth service, which the framework bundle uses directly:
+//
+//   POST {APIM_ROOT}auth/v2/login   {"username": ..., "password": ...}
+//     → {"ssoId": ..., "message": "Success", "token": ..., "status": "0"}
+//
+// That is one plain JSON round trip and it hands back exactly the two values
+// the reservations API wants:
+//   - `token` → the site's `lt-authentication` cookie → `X-LTF-CT` header
+//   - `ssoId` → the `LTFSSOIDCookie`                  → `X-LTF-SSOID` header
+//
+// Note the site omits the request's optional `type` field; sending it requires
+// a valid `LoginSessionType` enum value and 400s otherwise, so we omit it too.
+//
+// If this legacy service is ever retired, the B2C fallback is a ROPC policy
+// (Resource Owner Password Credentials), which also works headlessly:
+//   POST https://auth.lifetime.life/prdltmembersb2c.onmicrosoft.com
+//        /b2c_1a_ropcsignin/oauth2/v2.0/token
+//   grant_type=password, client_id=27e53cd6-9054-444f-bdfa-b341dcb7263d,
+//   scope=openid offline_access https://<tenant>/<client_id>/read
+// Its id_token carries the same values as the `LTF_SSOID` and
+// `LTF_AccessToken` claims.
 // ---------------------------------------------------------------------------
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
-// --- Azure AD B2C (ROPC) --------------------------------------------------
-const B2C_TENANT = "prdltmembersb2c.onmicrosoft.com";
-const B2C_ROPC_POLICY = "b2c_1a_ropcsignin";
-const B2C_TOKEN_URL =
-  `https://auth.lifetime.life/${B2C_TENANT}/${B2C_ROPC_POLICY}` +
-  "/oauth2/v2.0/token";
-// Public SPA client id — identifies the web app, not a secret.
-const B2C_CLIENT_ID = "27e53cd6-9054-444f-bdfa-b341dcb7263d";
-const B2C_SCOPE =
-  "openid offline_access " +
-  `https://${B2C_TENANT}/${B2C_CLIENT_ID}/read`;
-
 // --- Life Time API (Azure API Management) ---------------------------------
 const APIM_ROOT = "https://api.lifetimefitness.com/";
 // `window.lt.api.apimKey` from the page config. A gateway throttling key, not
-// a credential; the request still 401s without a valid SSO id.
+// a credential; requests still 401 without a valid session.
 const APIM_KEY = "924c03ce573d473793e184219a6a19bd";
+const LOGIN_PATH = "auth/v2/login";
+const PROFILE_PATH = "user-profile/api";
 const RESERVATIONS_PATH = "ux/web-schedules/v3/reservations";
 // Calendars subscribe far ahead; the SPA's own "brief" call looks 270 days out.
 const LOOKAHEAD_DAYS = 270;
+// The upstream token is a session cookie with no stated lifetime. Re-login is
+// cheap and `index.ts` retries on a 401, so keep the assumption conservative.
+const SESSION_TTL_MS = 55 * 60_000;
 
 /** Credentials were rejected, or the cached token went stale. */
 export class AuthError extends Error {}
 /** Life Time returned something we can't use. */
 export class UpstreamError extends Error {}
 
-interface TokenResponse {
-  id_token?: string;
-  access_token?: string;
-  expires_in?: number;
-  error?: string;
-  error_description?: string;
-}
-
-/** Claims we read out of the B2C id_token. */
-interface IdTokenClaims {
-  LTF_SSOID?: string;
-  LTF_AccessToken?: string;
+/** Response from `auth/v2/login`. */
+interface LoginResponse {
+  ssoId?: string;
+  /** Older casing seen in the framework's own fallback path. */
+  ssoid?: string;
+  token?: string;
+  /** "Success" on a good login, otherwise a human-readable reason. */
+  message?: string;
+  /** "0" on success; negative codes such as "-201" are credential failures. */
+  status?: string;
   memberId?: string | number;
-  exp?: number;
+  partyId?: string | number;
 }
 
 /**
@@ -106,84 +109,82 @@ interface ReservationsResponse {
   results?: RawReservation[];
 }
 
-/** Decode a JWT payload without verifying it (B2C already did). */
-function decodeJwtClaims(jwt: string): IdTokenClaims {
-  const parts = jwt.split(".");
-  if (parts.length < 2) throw new UpstreamError("malformed id_token");
-  const json = new TextDecoder().decode(b64urlDecode(parts[1]));
-  return JSON.parse(json) as IdTokenClaims;
-}
-
 export async function login(
   username: string,
   password: string
 ): Promise<Session> {
-  const body = new URLSearchParams({
-    grant_type: "password",
-    client_id: B2C_CLIENT_ID,
-    scope: B2C_SCOPE,
-    username,
-    password,
-    response_type: "token id_token",
-  });
-
   let res: Response;
   try {
-    res = await fetch(B2C_TOKEN_URL, {
+    res = await fetch(`${APIM_ROOT}${LOGIN_PATH}`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json; charset=UTF-8",
         Accept: "application/json",
         "User-Agent": UA,
+        "Ocp-Apim-Subscription-Key": APIM_KEY,
       },
-      body,
+      // `type` is deliberately omitted — see the note at the top of this file.
+      body: JSON.stringify({ username, password }),
     });
   } catch (err) {
     throw new UpstreamError(`login network error: ${String(err)}`);
   }
 
-  let data: TokenResponse;
+  let data: LoginResponse;
   try {
-    data = (await res.json()) as TokenResponse;
+    data = (await res.json()) as LoginResponse;
   } catch {
     throw new UpstreamError(`login: non-JSON response (${res.status})`);
   }
 
-  if (!res.ok || data.error) {
-    // B2C reports bad credentials as `access_denied` / `invalid_grant` with an
-    // `AADB2C90225` code; treat those as auth failures and everything else as
-    // an upstream problem.
-    const desc = data.error_description ?? "";
-    const isAuth =
-      data.error === "access_denied" ||
-      data.error === "invalid_grant" ||
-      /AADB2C90225/.test(desc);
-    if (isAuth) throw new AuthError("Life Time rejected those credentials");
-    throw new UpstreamError(`login failed: ${res.status} ${data.error ?? ""}`);
+  const token = data.token;
+  const sso = data.ssoId ?? data.ssoid;
+
+  if (data.message === "Success" && data.status === "0" && token && sso) {
+    return {
+      token,
+      sso,
+      memberId: await memberIdFor(token, data),
+      expiresAt: Date.now() + SESSION_TTL_MS,
+    };
   }
 
-  if (!data.id_token) throw new UpstreamError("login: no id_token in response");
-
-  const claims = decodeJwtClaims(data.id_token);
-  const sso = claims.LTF_SSOID;
-  const authToken = claims.LTF_AccessToken;
-  if (!sso || !authToken) {
-    throw new UpstreamError("login: id_token missing Life Time claims");
+  // A rejected sign-in comes back as a 4xx carrying a plain-language message
+  // (e.g. "User account not found", status "-201"). Anything else — a 5xx, a
+  // gateway problem, a success-shaped body missing its token — is upstream.
+  if (res.status >= 400 && res.status < 500 && data.message) {
+    throw new AuthError(`Life Time rejected the sign-in: ${data.message}`);
   }
+  throw new UpstreamError(
+    `login failed: ${res.status} ${data.message ?? "unexpected response"}`
+  );
+}
 
-  // Prefer the token's own expiry; fall back to a conservative 55 minutes.
-  const expiresAt =
-    typeof claims.exp === "number"
-      ? claims.exp * 1000
-      : Date.now() + 55 * 60_000;
-
-  return {
-    token: data.id_token,
-    sso,
-    authToken,
-    memberId: claims.memberId != null ? String(claims.memberId) : null,
-    expiresAt,
-  };
+/**
+ * The reservations query is scoped by member id. The login response may already
+ * carry one; otherwise ask the profile service. Best-effort — a failure here
+ * shouldn't sink an otherwise good login, it just widens the query.
+ */
+async function memberIdFor(
+  token: string,
+  login: LoginResponse
+): Promise<string | null> {
+  if (login.memberId != null) return String(login.memberId);
+  try {
+    const res = await fetch(`${APIM_ROOT}${PROFILE_PATH}`, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": UA,
+        "Ocp-Apim-Subscription-Key": APIM_KEY,
+        "X-LTF-CT": token,
+      },
+    });
+    if (!res.ok) return null;
+    const profile = (await res.json()) as { memberId?: string | number };
+    return profile.memberId != null ? String(profile.memberId) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** US-format date the reservations query expects, e.g. 09/05/2026. */
@@ -214,9 +215,9 @@ export async function getReservations(
       headers: {
         Accept: "application/json",
         "User-Agent": UA,
-        "ocp-apim-subscription-key": APIM_KEY,
+        "Ocp-Apim-Subscription-Key": APIM_KEY,
         "X-LTF-SSOID": session.sso,
-        "X-LTF-CT": session.authToken,
+        "X-LTF-CT": session.token,
       },
     });
   } catch (err) {
@@ -285,7 +286,7 @@ export function sessionIsFresh(session?: Session): session is Session {
   return (
     !!session &&
     !!session.sso &&
-    !!session.authToken &&
+    !!session.token &&
     session.expiresAt > Date.now() + 60_000
   );
 }

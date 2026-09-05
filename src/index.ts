@@ -74,6 +74,9 @@ async function handleRegister(
   try {
     session = await login(username, password);
   } catch (err) {
+    // The response stays deliberately vague; the log is where the cause goes,
+    // otherwise a local `wrangler dev` run has nothing to debug against.
+    console.error("register: login failed —", err);
     return err instanceof AuthError
       ? json({ error: "Life Time didn't accept that sign-in." }, 401)
       : json({ error: "Life Time isn't responding. Try again." }, 502);
@@ -141,6 +144,7 @@ async function handleFeed(
       // news, because Calendar renders a 500 as an unexplained error badge.
       return icsResponse(await authFailureIcs(feedId), 300, "AUTH");
     }
+    console.error("feed: upstream failure —", err);
     return new Response("Upstream error", { status: 502 });
   }
 
