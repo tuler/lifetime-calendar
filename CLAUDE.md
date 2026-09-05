@@ -77,6 +77,11 @@ reservation field names are confirmed.
 - Run `bun run typecheck` and `bun run test` before committing. `typecheck`
   covers both projects: the Worker (`tsconfig.json`) and the client
   (`tsconfig.client.json`), which need different `lib`/`types`.
+- TypeScript 7 (the native compiler) is used for typechecking only; Vite and
+  Vitest transpile with esbuild, so `tsc` never produces output. TS 7 rejects
+  side-effect imports of modules it has no declarations for, which is why
+  `src/client/vite-env.d.ts` references `vite/client` — that's what makes
+  `import "./styles.css"` legal. Don't delete it.
 
 ## Front end
 
