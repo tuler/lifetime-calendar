@@ -10,7 +10,7 @@ username and password with it (AES-GCM), stores only the ciphertext in KV, and
 returns the secret inside the subscription URL:
 
 ```
-webcal://lifetime-calendar.<subdomain>.workers.dev/feed/{feedId}/{secret}.ics
+webcal://lifetime.tuler.dev/feed/{feedId}/{secret}.ics
 ```
 
 Each time Calendar polls, the Worker decrypts using the secret from the path,
@@ -24,14 +24,26 @@ strangers.
 
 ## Setup
 
+Already deployed to **https://lifetime.tuler.dev**. The KV namespaces exist and
+their ids are in `wrangler.toml`, so day to day it's just:
+
 ```sh
 bun install
+bun run dev      # client + Worker together on http://localhost:5173
+bun run deploy   # builds, then deploys to lifetime.tuler.dev
+```
+
+From scratch on a new account you'd also need:
+
+```sh
 bunx wrangler kv namespace create FEEDS
 bunx wrangler kv namespace create FEEDS --preview
 # paste both ids into wrangler.toml
-bun run dev      # client + Worker together on http://localhost:5173
-bun run deploy   # builds, then deploys
 ```
+
+The custom domain is declared as a `[[routes]]` entry with `custom_domain =
+true`; wrangler creates and manages the DNS record in the `tuler.dev` zone, so
+there is no CNAME to add by hand.
 
 `bun run dev` uses the Cloudflare Vite plugin, so the Worker runs in workerd
 exactly as it does in production, with hot reload for the React client.

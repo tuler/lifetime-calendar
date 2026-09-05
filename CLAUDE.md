@@ -95,7 +95,11 @@ so there is one dev server rather than two.
   `/register` and `/feed/*` fall through to the Worker. Don't add a `/` route to
   the Worker; it would be shadowed by the asset.
 - `bun run build` writes `dist/client` and `dist/lifetime_calendar`;
-  `bun run deploy` builds then deploys.
+  `bun run deploy` builds then deploys to https://lifetime.tuler.dev.
+- `wrangler.toml` note: `workers_dev` and `preview_urls` are bare top-level
+  keys, so they must stay **above** the first `[table]` header. Putting them
+  after `[[routes]]` silently folds them into that route and the deploy fails
+  validation.
 - The client is plain React with no UI framework or router. There is one screen
   with two states (form, then the ready screen). Keep it that way.
 - Subscription uses a `webcal://` link so the button hands the feed straight to

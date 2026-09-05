@@ -2,6 +2,17 @@ name = "lifetime-calendar"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+# Set explicitly so deploys don't warn about defaulting them. These are bare
+# top-level keys, so they must stay above the first [table] header.
+workers_dev = true
+preview_urls = true
+
+# Custom domain. Wrangler creates and manages the DNS record for this hostname
+# in the tuler.dev zone; no manual CNAME is needed.
+[[routes]]
+pattern = "lifetime.tuler.dev"
+custom_domain = true
+
 # The built React app is uploaded as static assets. Anything that isn't a file
 # (i.e. /register and /feed/*) falls through to the Worker above.
 [assets]
