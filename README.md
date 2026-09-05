@@ -74,11 +74,11 @@ the B2C fallback if the legacy service is ever retired.
 | Path | Role |
 | --- | --- |
 | `src/index.ts` | Router, registration, cached feed endpoint |
-| `src/lifetime.ts` | The only Life Time–specific code; stubs live here |
+| `src/lifetime.ts` | The only Life Time–specific code: sign-in and reservations |
 | `src/crypto.ts` | AES-GCM seal/unseal keyed by the URL secret |
 | `src/ics.ts` | RFC 5545 output: folding, escaping, stable UIDs |
 | `src/types.ts` | `Env`, `Reservation`, `Credentials`, `SealedBox` |
-| `src/client/` | Vite + React signup page (`App.tsx`, `styles.css`) |
+| `src/client/` | Vite + React signup page (`App.tsx`, `icons.tsx`, `styles.css`) |
 | `index.html` | Client entry point |
 
 ## Calendar behaviour

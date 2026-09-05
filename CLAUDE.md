@@ -11,9 +11,9 @@ friends and family, so roughly five accounts.
 
 ## Current state
 
-Working end to end. Sign-in, the reservations fetch, and calendar subscription
-have all been exercised against a real account. `bun run test` covers `ics.ts`
-and `crypto.ts`; the Life Time calls have no unit tests yet.
+Live at https://lifetime.tuler.dev. Sign-in, the reservations fetch and calendar
+subscription all work against a real account. `bun run test` covers `ics.ts` and
+`crypto.ts`; the Life Time calls have no unit tests.
 
 ## Auth (reverse-engineered Sept 2026)
 
@@ -44,10 +44,6 @@ with client id `27e53cd6-9054-444f-bdfa-b341dcb7263d` to
 `https://auth.lifetime.life/prdltmembersb2c.onmicrosoft.com/b2c_1a_ropcsignin/oauth2/v2.0/token`.
 Its id_token carries the same two values as the `LTF_SSOID` and
 `LTF_AccessToken` claims. The recipe is in the header comment of `lifetime.ts`.
-
-`scripts/probe-login.mjs` exercises this whole chain with real credentials from
-the environment and prints the result with tokens redacted. Delete it once the
-reservation field names are confirmed.
 
 ## Design decisions worth preserving
 
@@ -132,20 +128,15 @@ credentials as Life Time's, since people have many logins.
 
 ## Next steps
 
-1. Run one real sign-in end to end and capture the authenticated
-   `/ux/web-schedules/v3/reservations` response, then tighten `RawReservation`
-   and `normalize()` to the actual field names. The title/instructor/station
-   mapping is currently best-effort — `start`, `end`, `eventId`, and `location`
-   are the fields confirmed from the SPA's own parsing.
-2. Confirm whether the API needs `X-LTF-CT` in addition to `X-LTF-SSOID` (the
-   SPA's cancel call sends only SSOID + key; the read path sends both). Also
-   decide whether `memberIds` should be omitted to pick up family members on the
-   same login, or kept to scope to the primary member.
-3. Timezone: the SPA reads `start`/`end` with `moment.parseZone`, i.e. the API
-   returns ISO stamps *with* offsets, so `ics.ts`'s UTC `Z` conversion is
-   correct. Re-confirm against a real reservation before trusting it fully.
-4. Consider a Cron Trigger to pre-warm caches, though lazy refresh on poll may
-   be enough at this scale.
+1. The reservation field mapping is still best-effort. `start`, `end`, `eventId`
+   and `location` are confirmed from the SPA's own parsing, but the title,
+   instructor and station names are guesses, which is why `RawReservation`
+   carries several alternative optionals. Once a feed has run for real, compare
+   an event in Calendar against the payload and tighten `normalize()`.
+2. `memberIds` scopes the query to the primary member. If a family member's
+   classes should land on the same feed, try omitting it.
+3. Maybe a Cron Trigger to pre-warm caches, though lazy refresh on poll is
+   likely enough at this scale.
 
 ## Out of scope
 
