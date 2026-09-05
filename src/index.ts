@@ -88,9 +88,14 @@ async function handleRegister(
   const record: FeedRecord = { ...box, createdAt: Date.now() };
   await env.FEEDS.put(`feed:${feedId}`, JSON.stringify(record));
 
+  // Locally, `wrangler dev` only speaks http. Calendar resolves `webcal://`
+  // over TLS, so a webcal link to localhost fails to subscribe — hand back the
+  // scheme this request actually arrived on as well.
+  const path = `/feed/${feedId}/${secret}.ics`;
+  const scheme = url.protocol === "http:" ? "http" : "https";
   return json({
-    webcal: `webcal://${url.host}/feed/${feedId}/${secret}.ics`,
-    https: `https://${url.host}/feed/${feedId}/${secret}.ics`,
+    webcal: `webcal://${url.host}${path}`,
+    direct: `${scheme}://${url.host}${path}`,
   });
 }
 

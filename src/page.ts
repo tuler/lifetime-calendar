@@ -84,6 +84,8 @@ export const signupPage: string = `<!doctype html>
     <h1>Your link is ready</h1>
     <p class="lede">On a Mac, open Calendar, choose File &rsaquo; New Calendar Subscription, and paste this in. On iPhone it's Settings &rsaquo; Apps &rsaquo; Calendar &rsaquo; Accounts &rsaquo; Add Account &rsaquo; Other.</p>
     <code id="url"></code>
+    <p class="note" id="alt-note" hidden>If your calendar app refuses the link above, use this one instead:</p>
+    <code id="alt" hidden></code>
     <p class="note">Save it somewhere. The link is the only copy of the key that unlocks your stored password, so it can't be shown again — and anyone who has it can see your class schedule.</p>
   </section>
 
@@ -109,6 +111,11 @@ f.addEventListener('submit', async (e) => {
     if (!res.ok) throw new Error(data.error || 'Something went wrong. Try again.');
     f.style.display = 'none';
     document.getElementById('url').textContent = data.webcal;
+    if (data.direct) {
+      document.getElementById('alt').textContent = data.direct;
+      document.getElementById('alt').hidden = false;
+      document.getElementById('alt-note').hidden = false;
+    }
     document.getElementById('out').classList.add('on');
   } catch (err) {
     msg.textContent = err.message;
