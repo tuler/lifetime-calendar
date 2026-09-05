@@ -10,9 +10,27 @@ Users: the author plus friends and family, so roughly five accounts.
 
 ## Current state
 
-Complete and typechecking, except `login()` and `getReservations()` in
-`src/lifetime.ts`, which throw `UpstreamError` until the real endpoints are
-filled in from a DevTools capture. `bun run test` covers `ics.ts` and `crypto.ts`.
+Complete and typechecking. `login()` and `getReservations()` in
+`src/lifetime.ts` are now implemented against the real endpoints (see the "Auth"
+notes below). `bun run test` covers `ics.ts` and `crypto.ts`; the Life Time
+calls have no unit tests yet and haven't been exercised with real credentials.
+
+## Auth (reverse-engineered Sept 2026)
+
+Sign-in is delegated to **Azure AD B2C** — the "Microsoft Authentication" you
+saw. The website itself uses an interactive MSAL redirect
+(`B2C_1A_WebUsernameSignIn`), useless to a headless Worker. The same tenant also
+exposes a **ROPC** policy, `B2C_1A_ROPCSignIn`, which takes username + password
+in one form POST and returns tokens — that's what `login()` uses.
+
+- Token URL: `https://auth.lifetime.life/prdltmembersb2c.onmicrosoft.com/b2c_1a_ropcsignin/oauth2/v2.0/token`
+- Public client id `27e53cd6-9054-444f-bdfa-b341dcb7263d`, scope `openid offline_access https://prdltmembersb2c.onmicrosoft.com/27e53cd6-.../read`.
+- The id_token carries Life Time claims `LTF_SSOID` and `LTF_AccessToken`, which
+  become the `X-LTF-SSOID` and `X-LTF-CT` headers on the API call.
+- Reservations: `GET https://api.lifetimefitness.com/ux/web-schedules/v3/reservations`
+  behind Azure API Management, needing a static `ocp-apim-subscription-key`
+  (`924c03ce...`, from the page config, not a secret) plus the two headers above.
+  Returns `{ results: [...] }`. Confirmed 401 without a valid SSO id.
 
 ## Design decisions worth preserving
 
@@ -42,14 +60,18 @@ filled in from a DevTools capture. `bun run test` covers `ics.ts` and `crypto.ts
 
 ## Next steps
 
-1. Capture the login and reservations requests from my.lifetime.life and
-   implement the two stubs. Tighten the `RawReservation` interface to the real
-   response.
-2. Handle cookie-based auth if login returns `Set-Cookie` — Workers keep no
-   cookie jar, so cookies must be parsed and replayed manually.
-3. Confirm timezone handling against a real reservation. `ics.ts` converts to
-   UTC `Z` stamps, which is correct only if the API returns offsets. If it
-   returns naive local times, add a `VTIMEZONE` and club-local conversion.
+1. Run one real sign-in end to end and capture the authenticated
+   `/ux/web-schedules/v3/reservations` response, then tighten `RawReservation`
+   and `normalize()` to the actual field names. The title/instructor/station
+   mapping is currently best-effort — `start`, `end`, `eventId`, and `location`
+   are the fields confirmed from the SPA's own parsing.
+2. Confirm whether the API needs `X-LTF-CT` in addition to `X-LTF-SSOID` (the
+   SPA's cancel call sends only SSOID + key; the read path sends both). Also
+   decide whether `memberIds` should be omitted to pick up family members on the
+   same login, or kept to scope to the primary member.
+3. Timezone: the SPA reads `start`/`end` with `moment.parseZone`, i.e. the API
+   returns ISO stamps *with* offsets, so `ics.ts`'s UTC `Z` conversion is
+   correct. Re-confirm against a real reservation before trusting it fully.
 4. Consider a Cron Trigger to pre-warm caches, though lazy refresh on poll may
    be enough at this scale.
 
