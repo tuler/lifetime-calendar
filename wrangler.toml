@@ -11,8 +11,8 @@ not_found_handling = "single-page-application"
 # bunx wrangler kv namespace create FEEDS --preview
 [[kv_namespaces]]
 binding = "FEEDS"
-id = "REPLACE_WITH_KV_ID"
-preview_id = "REPLACE_WITH_PREVIEW_KV_ID"
+id = "5b15476410d94507b0717d4719e9afbb"
+preview_id = "f1b039b955c44938aa2ee23c2f0488ac"
 
 [vars]
 # Seconds a generated .ics is served from cache before Life Time is re-queried.
