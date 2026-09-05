@@ -2,6 +2,11 @@ name = "lifetime-calendar"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+# The built React app is uploaded as static assets. Anything that isn't a file
+# (i.e. /register and /feed/*) falls through to the Worker above.
+[assets]
+not_found_handling = "single-page-application"
+
 # bunx wrangler kv namespace create FEEDS
 # bunx wrangler kv namespace create FEEDS --preview
 [[kv_namespaces]]

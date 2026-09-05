@@ -6,7 +6,6 @@ import {
   AuthError,
 } from "./lifetime";
 import { buildIcs } from "./ics";
-import { signupPage } from "./page";
 import type { Credentials, Env, FeedRecord, Reservation } from "./types";
 
 const FEED_PATH = /^\/feed\/([\w-]+)\/([\w-]+)\.ics$/;
@@ -24,12 +23,6 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url);
-
-    if (url.pathname === "/" && request.method === "GET") {
-      return new Response(signupPage, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
-    }
 
     if (url.pathname === "/register" && request.method === "POST") {
       return handleRegister(request, env, url);

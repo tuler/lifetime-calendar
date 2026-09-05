@@ -4,16 +4,16 @@ Context for working on this repo.
 
 ## What this is
 
-A Cloudflare Worker (TypeScript, no framework) that logs into Life Time on a
-user's behalf and serves their class reservations as a subscribable `.ics` feed.
-Users: the author plus friends and family, so roughly five accounts.
+A Cloudflare Worker that logs into Life Time on a user's behalf and serves their
+class reservations as a subscribable `.ics` feed, plus a small Vite + React
+signup page served as static assets from the same Worker. Users: the author plus
+friends and family, so roughly five accounts.
 
 ## Current state
 
-Complete and typechecking. `login()` and `getReservations()` in
-`src/lifetime.ts` are now implemented against the real endpoints (see the "Auth"
-notes below). `bun run test` covers `ics.ts` and `crypto.ts`; the Life Time
-calls have no unit tests yet and haven't been exercised with real credentials.
+Working end to end. Sign-in, the reservations fetch, and calendar subscription
+have all been exercised against a real account. `bun run test` covers `ics.ts`
+and `crypto.ts`; the Life Time calls have no unit tests yet.
 
 ## Auth (reverse-engineered Sept 2026)
 
@@ -69,11 +69,33 @@ reservation field names are confirmed.
 ## Conventions
 
 - Strict TypeScript, ES modules, no default exports except the Worker handler.
-- No runtime dependencies. WebCrypto and `fetch` only. Keep it that way unless
-  there's a strong reason.
+- **The Worker has no runtime dependencies** — WebCrypto and `fetch` only. Keep
+  it that way. React and Vite are build/client-side only and never ship into the
+  Worker bundle.
 - Errors the user might see get plain-language messages; internal failures get
-  status codes and nothing else.
-- Run `bun run typecheck` and `bun run test` before committing.
+  status codes and a `console.error` so `vite dev` has something to show.
+- Run `bun run typecheck` and `bun run test` before committing. `typecheck`
+  covers both projects: the Worker (`tsconfig.json`) and the client
+  (`tsconfig.client.json`), which need different `lib`/`types`.
+
+## Front end
+
+A Vite + React SPA built with `@cloudflare/vite-plugin`, the Cloudflare-supported
+setup. `vite dev` runs the real Worker in workerd alongside the client with HMR,
+so there is one dev server rather than two.
+
+- `bun run dev` → http://localhost:5173 (client **and** Worker).
+- The built client is uploaded as static assets; `[assets]` in `wrangler.toml`
+  uses `not_found_handling = "single-page-application"`. Static files win, so
+  `/register` and `/feed/*` fall through to the Worker. Don't add a `/` route to
+  the Worker; it would be shadowed by the asset.
+- `bun run build` writes `dist/client` and `dist/lifetime_calendar`;
+  `bun run deploy` builds then deploys.
+- The client is plain React with no UI framework or router. There is one screen
+  with two states (form, then the ready screen). Keep it that way.
+- Subscription uses a `webcal://` link so the button hands the feed straight to
+  the OS calendar. Over a local http dev server that can't work, so the button
+  falls back to the plain URL and says so.
 
 ## Next steps
 

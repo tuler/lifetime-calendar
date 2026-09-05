@@ -29,35 +29,33 @@ bun install
 bunx wrangler kv namespace create FEEDS
 bunx wrangler kv namespace create FEEDS --preview
 # paste both ids into wrangler.toml
-bun run dev
-bun run deploy
+bun run dev      # client + Worker together on http://localhost:5173
+bun run deploy   # builds, then deploys
 ```
+
+`bun run dev` uses the Cloudflare Vite plugin, so the Worker runs in workerd
+exactly as it does in production, with hot reload for the React client.
 
 Set `SIGNUPS_OPEN = "0"` in `wrangler.toml` and redeploy once everyone has
 registered, so the form stops accepting new users.
 
-## Before it works: capture the two Life Time calls
+## How sign-in works
 
-`src/lifetime.ts` has `login()` and `getReservations()` stubbed. To fill them in:
+Life Time's own login page uses Azure AD B2C, an interactive Microsoft redirect
+that a Worker can't drive. Underneath it, the same API gateway still exposes the
+older first-party auth service, and that's what `src/lifetime.ts` uses:
 
-1. Log into my.lifetime.life with DevTools open on Network, filtered to
-   Fetch/XHR, "Preserve log" checked.
-2. Log out and back in. Find the POST carrying the credentials. Note the URL,
-   request body, custom headers the SPA sends, and how the token comes back
-   (JSON field vs. `Set-Cookie`).
-3. Open the reservations page. Find the GET returning bookings as JSON. Note the
-   URL, query params, and auth header.
-4. Translate both into `fetch` calls, then adjust `normalize()` and
-   `RawReservation` to match the real field names.
+```
+POST https://api.lifetimefitness.com/auth/v2/login
+{"username": ..., "password": ...}
+→ {"ssoId": ..., "message": "Success", "token": ..., "status": "0"}
+```
 
-Watch for:
-
-- **Cookie auth.** Workers' `fetch` keeps no cookie jar. If login returns
-  `Set-Cookie`, parse it and send it back manually as a `Cookie` header.
-- **Bot protection.** If login returns a challenge page, a Worker can't complete
-  it and you'd need Browser Rendering, which costs far more per request.
-- **Date windows.** The reservations endpoint may default to a narrow range;
-  pass explicit start/end so future bookings appear.
+`token` becomes the `X-LTF-CT` header and `ssoId` the `X-LTF-SSOID` header on
+every later call, alongside a static `Ocp-Apim-Subscription-Key` taken from the
+site's own page config. Reservations come from
+`ux/web-schedules/v3/reservations`. See `CLAUDE.md` for the full notes, including
+the B2C fallback if the legacy service is ever retired.
 
 ## Layout
 
@@ -67,8 +65,9 @@ Watch for:
 | `src/lifetime.ts` | The only Life Time–specific code; stubs live here |
 | `src/crypto.ts` | AES-GCM seal/unseal keyed by the URL secret |
 | `src/ics.ts` | RFC 5545 output: folding, escaping, stable UIDs |
-| `src/page.ts` | Signup page markup |
 | `src/types.ts` | `Env`, `Reservation`, `Credentials`, `SealedBox` |
+| `src/client/` | Vite + React signup page (`App.tsx`, `styles.css`) |
+| `index.html` | Client entry point |
 
 ## Calendar behaviour
 
