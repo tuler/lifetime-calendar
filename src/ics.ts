@@ -58,7 +58,13 @@ function describe(r: Reservation): string {
   const parts: string[] = [];
   if (r.instructor) parts.push(`Instructor: ${r.instructor}`);
   if (r.station) parts.push(`Station: ${r.station}`);
-  if (r.status === "waitlisted") parts.push("You are on the waitlist.");
+  if (r.status === "waitlisted") {
+    parts.push(
+      r.waitlistPosition != null
+        ? `On the waitlist — number ${r.waitlistPosition} in line.`
+        : "On the waitlist."
+    );
+  }
   return parts.join("\n");
 }
 

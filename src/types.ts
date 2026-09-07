@@ -17,7 +17,16 @@ export interface Reservation {
   instructor: string | null;
   /** Bike or station number, when the class assigns one. */
   station: string | null;
+  /** Place in line when waitlisted, otherwise null. */
+  waitlistPosition: number | null;
   status: "confirmed" | "waitlisted";
+  /**
+   * Whose booking this is. On a family membership one login sees the whole
+   * household, so these are what distinguish the members.
+   */
+  memberId: string | null;
+  /** First name only, as Life Time returns it. */
+  memberName: string | null;
 }
 
 export interface Session {

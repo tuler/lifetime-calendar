@@ -11,7 +11,10 @@ const sample: Reservation = {
     "Life Time Ashburn — Studio 2, a deliberately long location to force folding",
   instructor: "Dana",
   station: "14",
+  waitlistPosition: 3,
   status: "waitlisted",
+  memberId: "113746495",
+  memberName: "Danilo",
 };
 
 describe("buildIcs", () => {

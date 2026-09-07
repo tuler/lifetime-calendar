@@ -189,7 +189,10 @@ function authFailureIcs(feedId: string): Promise<string> {
       location: "",
       instructor: null,
       station: null,
+      waitlistPosition: null,
       status: "confirmed",
+      memberId: null,
+      memberName: null,
     },
   ]);
 }

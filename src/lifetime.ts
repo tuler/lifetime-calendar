@@ -73,36 +73,43 @@ interface LoginResponse {
   partyId?: string | number;
 }
 
+/** A household member as the registration block lists them. */
+interface RawMember {
+  name?: string;
+  id?: number | string;
+  /** Confirmed booking: the assigned bike/station/court spot. */
+  spot?: number | string;
+  /** Present instead of `spot` when this member is on the waitlist. */
+  spotWaitlist?: number | string;
+}
+
 /**
  * One reservation as the v3 endpoint returns it, inside `{ results: [...] }`.
  *
- * Verified from the SPA's own parsing (it reads `start`, `end`, `eventId`,
- * `location`, and a nested `registration` object). The precise field names for
- * the class title, instructor, and station/spot are best-effort until checked
- * against a live authenticated response — hence the several optionals below.
+ * Confirmed against a live authenticated response (Sept 2026). Note the row
+ * carries `memberId`/`memberName`: on a family membership the endpoint returns
+ * the whole household, and these are what say whose booking it is.
  */
 interface RawReservation {
-  registrationId?: string | number;
-  id?: string | number;
-  eventId?: string | number;
-  name?: string;
+  /** The registration id. Stable per booking, so UIDs derive from it. */
+  id?: string;
+  memberId?: number | string;
+  /** First name only, e.g. "Danilo". */
+  memberName?: string;
+  eventId?: string;
   eventName?: string;
-  className?: string;
-  start?: string;
-  end?: string;
-  startDateTime?: string;
-  endDateTime?: string;
+  /** Already a full description, e.g. "Court 1 – 3, Princeton". */
   location?: string;
   locationName?: string;
-  studioName?: string;
-  instructorName?: string;
-  instructor?: string | { name?: string };
-  organizers?: Array<string | { name?: string }>;
-  stationNumber?: string | number;
-  spot?: string | number;
-  waitlisted?: boolean;
-  isWaitlisted?: boolean;
-  status?: string;
+  instructors?: Array<{ name?: string }>;
+  registration?: {
+    registeredMembers?: RawMember[];
+    unregisteredMembers?: RawMember[];
+  };
+  start?: string;
+  end?: string;
+  reservationType?: string;
+  category?: string;
 }
 
 interface ReservationsResponse {
@@ -241,44 +248,33 @@ export async function getReservations(
 
 /** Map one raw record onto the shape ics.ts wants. */
 export function normalize(raw: RawReservation): Reservation {
-  const location =
-    raw.location ??
-    [raw.locationName, raw.studioName].filter(Boolean).join(" — ");
-
-  const waitlisted = raw.isWaitlisted ?? raw.waitlisted ?? raw.status === "waitlisted";
+  // The row's own `memberId` picks this member out of the registration block,
+  // which is where the spot (or waitlist position) actually lives.
+  const me = raw.registration?.registeredMembers?.find(
+    (m) => String(m.id) === String(raw.memberId)
+  );
+  const waitlisted = me?.spotWaitlist != null;
 
   return {
-    id: String(raw.registrationId ?? raw.id ?? raw.eventId ?? ""),
-    title:
-      raw.name ?? raw.eventName ?? raw.className ?? "Life Time reservation",
-    start: raw.start ?? raw.startDateTime ?? "",
-    end: raw.end ?? raw.endDateTime ?? "",
-    location: location ?? "",
+    id: String(raw.id ?? raw.eventId ?? ""),
+    memberId: raw.memberId != null ? String(raw.memberId) : null,
+    memberName: raw.memberName ?? null,
+    title: raw.eventName ?? "Life Time reservation",
+    start: raw.start ?? "",
+    end: raw.end ?? "",
+    location: raw.location ?? raw.locationName ?? "",
     instructor: readInstructor(raw),
-    station:
-      raw.stationNumber != null
-        ? String(raw.stationNumber)
-        : raw.spot != null
-          ? String(raw.spot)
-          : null,
+    station: me?.spot != null ? String(me.spot) : null,
+    waitlistPosition: waitlisted ? Number(me!.spotWaitlist) : null,
     status: waitlisted ? "waitlisted" : "confirmed",
   };
 }
 
 function readInstructor(raw: RawReservation): string | null {
-  if (raw.instructorName) return raw.instructorName;
-  if (typeof raw.instructor === "string") return raw.instructor;
-  if (raw.instructor && typeof raw.instructor === "object") {
-    return raw.instructor.name ?? null;
-  }
-  if (raw.organizers && raw.organizers.length) {
-    const names = raw.organizers.map((o) =>
-      typeof o === "string" ? o : (o?.name ?? "")
-    );
-    const joined = names.filter(Boolean).join(", ");
-    return joined || null;
-  }
-  return null;
+  const names = (raw.instructors ?? [])
+    .map((i) => i?.name ?? "")
+    .filter(Boolean);
+  return names.length ? names.join(", ") : null;
 }
 
 /** Re-logging in on every calendar poll is slow and rude; reuse the token. */
