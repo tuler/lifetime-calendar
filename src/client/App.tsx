@@ -7,29 +7,34 @@ import {
   LockIcon,
 } from "./icons";
 
-interface Links {
+interface Feed {
+  /** Whose calendar this is — a first name, or "Everyone". */
+  name: string;
+  /** The member id, or null for the whole-household feed. */
+  member: string | null;
   /** `webcal://…` — what the Subscribe button opens. */
   webcal: string;
   /** Same feed over http(s), for apps that want a plain URL. */
   direct: string;
 }
 
-interface RegisterResponse extends Partial<Links> {
+interface RegisterResponse {
+  feeds?: Feed[];
   error?: string;
 }
 
 export function App() {
-  const [links, setLinks] = useState<Links | null>(null);
+  const [feeds, setFeeds] = useState<Feed[] | null>(null);
 
   return (
     <main className="card">
       <LifeTimeLogo />
-      {links ? <Ready links={links} /> : <SignUp onDone={setLinks} />}
+      {feeds ? <Ready feeds={feeds} /> : <SignUp onDone={setFeeds} />}
     </main>
   );
 }
 
-function SignUp({ onDone }: { onDone: (links: Links) => void }) {
+function SignUp({ onDone }: { onDone: (feeds: Feed[]) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,10 +55,10 @@ function SignUp({ onDone }: { onDone: (links: Links) => void }) {
       });
 
       const data = (await res.json()) as RegisterResponse;
-      if (!res.ok || !data.webcal || !data.direct) {
+      if (!res.ok || !data.feeds?.length) {
         throw new Error(data.error ?? "Something went wrong. Try again.");
       }
-      onDone({ webcal: data.webcal, direct: data.direct });
+      onDone(data.feeds);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Something went wrong. Try again."
@@ -115,10 +120,12 @@ function SignUp({ onDone }: { onDone: (links: Links) => void }) {
   );
 }
 
-function Ready({ links }: { links: Links }) {
+function Ready({ feeds }: { feeds: Feed[] }) {
   // `webcal://` is handed to the OS, which fetches over TLS. A local http dev
   // server can't serve that, so point the button at the plain URL instead.
-  const local = links.direct.startsWith("http://");
+  const local = feeds[0].direct.startsWith("http://");
+  const href = (f: Feed) => (local ? f.direct : f.webcal);
+  const many = feeds.length > 1;
 
   return (
     <>
@@ -126,14 +133,25 @@ function Ready({ links }: { links: Links }) {
         <CheckIcon />
       </span>
 
-      <h1>Calendar ready</h1>
+      <h1>{many ? "Calendars ready" : "Calendar ready"}</h1>
 
-      <a className="btn primary" href={local ? links.direct : links.webcal}>
-        <CalendarIcon />
-        <span>Add to Calendar</span>
-      </a>
+      {many && (
+        <p className="lede">One for each person on your membership.</p>
+      )}
 
-      <CopyLink url={links.direct} />
+      {feeds.map((feed) => (
+        <a
+          key={feed.direct}
+          // The people are the point; the everyone-feed is the afterthought.
+          className={`btn ${feed.member || !many ? "primary" : "secondary"}`}
+          href={href(feed)}
+        >
+          <CalendarIcon />
+          <span>{many ? feed.name : "Add to Calendar"}</span>
+        </a>
+      ))}
+
+      {!many && <CopyLink url={feeds[0].direct} />}
 
       {local && (
         <p className="hint">
@@ -151,12 +169,22 @@ function Ready({ links }: { links: Links }) {
           <dt>Google</dt>
           <dd>Other calendars › From URL</dd>
         </dl>
-        <code>{links.direct}</code>
+        {feeds.map((feed) => (
+          <div className="feed" key={feed.direct}>
+            {many && <span className="who">{feed.name}</span>}
+            <code>{feed.direct}</code>
+            <CopyLink url={feed.direct} />
+          </div>
+        ))}
       </details>
 
       <p className="fine">
         <LockIcon />
-        <span>Save this link. It can&rsquo;t be shown again.</span>
+        <span>
+          {many
+            ? "Save these links. They can’t be shown again."
+            : "Save this link. It can’t be shown again."}
+        </span>
       </p>
     </>
   );

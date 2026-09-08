@@ -1,4 +1,4 @@
-import type { Reservation, Session } from "./types";
+import type { Member, Reservation, Session } from "./types";
 
 // ---------------------------------------------------------------------------
 // Life Time adapter.
@@ -26,6 +26,16 @@ import type { Reservation, Session } from "./types";
 // Note the site omits the request's optional `type` field; sending it requires
 // a valid `LoginSessionType` enum value and 400s otherwise, so we omit it too.
 //
+// The login response carries a `partyId` but *no* `memberId`, and the profile
+// service that used to supply one (`user-profile/api`) now 401s for auth-v2
+// sessions on every header shape the site's own interceptor can produce. That
+// doesn't matter: on a family membership the reservations endpoint returns the
+// whole household regardless of who signs in, and tags each row with the
+// `memberId`/`memberName` it belongs to. So we fetch unscoped and split the
+// rows by member here. (The `memberIds` query param does still work, but it
+// takes a single id — a comma-separated pair 400s — and it is not enforced
+// per-session anyway: any member of a household can request any other's.)
+//
 // If this legacy service is ever retired, the B2C fallback is a ROPC policy
 // (Resource Owner Password Credentials), which also works headlessly:
 //   POST https://auth.lifetime.life/prdltmembersb2c.onmicrosoft.com
@@ -46,7 +56,6 @@ const APIM_ROOT = "https://api.lifetimefitness.com/";
 // a credential; requests still 401 without a valid session.
 const APIM_KEY = "924c03ce573d473793e184219a6a19bd";
 const LOGIN_PATH = "auth/v2/login";
-const PROFILE_PATH = "user-profile/api";
 const RESERVATIONS_PATH = "ux/web-schedules/v3/reservations";
 // Calendars subscribe far ahead; the SPA's own "brief" call looks 270 days out.
 const LOOKAHEAD_DAYS = 270;
@@ -74,7 +83,7 @@ interface LoginResponse {
 }
 
 /** A household member as the registration block lists them. */
-interface RawMember {
+export interface RawMember {
   name?: string;
   id?: number | string;
   /** Confirmed booking: the assigned bike/station/court spot. */
@@ -90,7 +99,7 @@ interface RawMember {
  * carries `memberId`/`memberName`: on a family membership the endpoint returns
  * the whole household, and these are what say whose booking it is.
  */
-interface RawReservation {
+export interface RawReservation {
   /** The registration id. Stable per booking, so UIDs derive from it. */
   id?: string;
   memberId?: number | string;
@@ -151,7 +160,6 @@ export async function login(
     return {
       token,
       sso,
-      memberId: await memberIdFor(token, data),
       expiresAt: Date.now() + SESSION_TTL_MS,
     };
   }
@@ -167,33 +175,6 @@ export async function login(
   );
 }
 
-/**
- * The reservations query is scoped by member id. The login response may already
- * carry one; otherwise ask the profile service. Best-effort — a failure here
- * shouldn't sink an otherwise good login, it just widens the query.
- */
-async function memberIdFor(
-  token: string,
-  login: LoginResponse
-): Promise<string | null> {
-  if (login.memberId != null) return String(login.memberId);
-  try {
-    const res = await fetch(`${APIM_ROOT}${PROFILE_PATH}`, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": UA,
-        "Ocp-Apim-Subscription-Key": APIM_KEY,
-        "X-LTF-CT": token,
-      },
-    });
-    if (!res.ok) return null;
-    const profile = (await res.json()) as { memberId?: string | number };
-    return profile.memberId != null ? String(profile.memberId) : null;
-  } catch {
-    return null;
-  }
-}
-
 /** US-format date the reservations query expects, e.g. 09/05/2026. */
 function usDate(d: Date): string {
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -201,9 +182,49 @@ function usDate(d: Date): string {
   return `${mm}/${dd}/${d.getUTCFullYear()}`;
 }
 
+/**
+ * Every reservation the account can see. On a family membership that is the
+ * whole household, not just the person who signed in — see the note up top.
+ */
 export async function getReservations(
   session: Session
 ): Promise<Reservation[]> {
+  return (await fetchRows(session)).map(normalize);
+}
+
+/**
+ * The household roster, as far as the schedule endpoint reveals it. Members
+ * turn up three ways: as the owner of a row, and in a row's registered and
+ * unregistered lists. Union them, because any single row only lists the
+ * members eligible for *that* event.
+ *
+ * A household with no bookings at all therefore looks empty. Callers must
+ * handle that — see `handleRegister`.
+ */
+export async function getHousehold(session: Session): Promise<Member[]> {
+  return rosterFrom(await fetchRows(session));
+}
+
+/** The roster-building half of `getHousehold`, split out so it can be tested. */
+export function rosterFrom(rows: RawReservation[]): Member[] {
+  const byId = new Map<string, string>();
+  const add = (id?: string | number | null, name?: string | null) => {
+    if (id == null || !name) return;
+    byId.set(String(id), name);
+  };
+
+  for (const row of rows) {
+    add(row.memberId, row.memberName);
+    for (const m of row.registration?.registeredMembers ?? []) add(m.id, m.name);
+    for (const m of row.registration?.unregisteredMembers ?? []) add(m.id, m.name);
+  }
+
+  return [...byId]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function fetchRows(session: Session): Promise<RawReservation[]> {
   const now = new Date();
   const end = new Date(now.getTime() + LOOKAHEAD_DAYS * 86_400_000);
 
@@ -212,7 +233,6 @@ export async function getReservations(
     end: usDate(end),
     pageSize: "0", // 0 = no page limit, matching the SPA
   });
-  if (session.memberId) params.set("memberIds", session.memberId);
 
   const url = `${APIM_ROOT}${RESERVATIONS_PATH}?${params.toString()}`;
 
@@ -243,7 +263,7 @@ export async function getReservations(
     throw new UpstreamError("reservations: non-JSON response");
   }
 
-  return (data.results ?? []).map(normalize);
+  return data.results ?? [];
 }
 
 /** Map one raw record onto the shape ics.ts wants. */

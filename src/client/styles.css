@@ -188,6 +188,11 @@ summary:focus-visible {
   background: var(--accent-hover);
 }
 
+/* Stacked member buttons need room between them. */
+.btn.primary + .btn.primary {
+  margin-top: 0.6rem;
+}
+
 .btn.primary:disabled {
   opacity: 0.6;
   cursor: progress;
@@ -262,6 +267,25 @@ summary {
 .steps dd {
   margin: 0;
   color: var(--muted);
+}
+
+/* One block per household member inside "Add it manually". */
+.feed + .feed {
+  margin-top: 1.1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--rule);
+}
+
+.feed .who {
+  display: block;
+  margin-top: 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.feed .btn.secondary {
+  margin-top: 0.5rem;
 }
 
 code {

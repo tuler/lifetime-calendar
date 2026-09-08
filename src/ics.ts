@@ -71,9 +71,10 @@ function describe(r: Reservation): string {
 export async function buildIcs(
   feedId: string,
   reservations: Reservation[],
-  opts: { ttlMinutes?: number } = {}
+  opts: { ttlMinutes?: number; name?: string } = {}
 ): Promise<string> {
   const ttlMinutes = opts.ttlMinutes ?? 30;
+  const name = escapeText(opts.name ?? "Life Time");
   const now = toUtcStamp(new Date().toISOString());
   const lines: string[] = [
     "BEGIN:VCALENDAR",
@@ -81,8 +82,8 @@ export async function buildIcs(
     `PRODID:${PRODID}`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "NAME:Life Time",
-    "X-WR-CALNAME:Life Time",
+    `NAME:${name}`,
+    `X-WR-CALNAME:${name}`,
     `X-PUBLISHED-TTL:PT${ttlMinutes}M`,
     `REFRESH-INTERVAL;VALUE=DURATION:PT${ttlMinutes}M`,
   ];

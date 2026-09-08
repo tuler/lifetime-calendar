@@ -2,11 +2,18 @@ import { seal, unseal, newSecret, newFeedId } from "./crypto";
 import {
   login,
   getReservations,
+  getHousehold,
   sessionIsFresh,
   AuthError,
 } from "./lifetime";
 import { buildIcs } from "./ics";
-import type { Credentials, Env, FeedRecord, Reservation } from "./types";
+import type {
+  Credentials,
+  Env,
+  FeedRecord,
+  Member,
+  Reservation,
+} from "./types";
 
 const FEED_PATH = /^\/feed\/([\w-]+)\/([\w-]+)\.ics$/;
 
@@ -75,21 +82,52 @@ async function handleRegister(
       : json({ error: "Life Time isn't responding. Try again." }, 502);
   }
 
-  const feedId = newFeedId();
-  const secret = newSecret();
-  const box = await seal(secret, { username, password, session });
-  const record: FeedRecord = { ...box, createdAt: Date.now() };
-  await env.FEEDS.put(`feed:${feedId}`, JSON.stringify(record));
+  // On a family membership one login sees the whole household, so mint a feed
+  // per member rather than making the family share one mixed-up calendar.
+  let household: Member[];
+  try {
+    household = await getHousehold(session);
+  } catch (err) {
+    console.error("register: household lookup failed —", err);
+    household = [];
+  }
 
-  // Locally, `wrangler dev` only speaks http. Calendar resolves `webcal://`
-  // over TLS, so a webcal link to localhost fails to subscribe — hand back the
-  // scheme this request actually arrived on as well.
-  const path = `/feed/${feedId}/${secret}.ics`;
+  // A household with no bookings anywhere reveals no roster (the names only
+  // ride along on reservations), and a solo membership has nothing to split.
+  // Both get the single unscoped feed, which is the old behaviour.
+  const wanted: Array<Member | null> =
+    household.length > 1 ? [...household, null] : [null];
+
   const scheme = url.protocol === "http:" ? "http" : "https";
-  return json({
-    webcal: `webcal://${url.host}${path}`,
-    direct: `${scheme}://${url.host}${path}`,
-  });
+  const feeds = await Promise.all(
+    wanted.map(async (member) => {
+      const feedId = newFeedId();
+      const secret = newSecret();
+      const creds: Credentials = {
+        username,
+        password,
+        session,
+        memberId: member?.id ?? null,
+        memberName: member?.name ?? null,
+      };
+      const box = await seal(secret, creds);
+      const record: FeedRecord = { ...box, createdAt: Date.now() };
+      await env.FEEDS.put(`feed:${feedId}`, JSON.stringify(record));
+
+      // Locally, `wrangler dev` only speaks http. Calendar resolves `webcal://`
+      // over TLS, so a webcal link to localhost fails to subscribe — hand back
+      // the scheme this request actually arrived on as well.
+      const path = `/feed/${feedId}/${secret}.ics`;
+      return {
+        name: member?.name ?? "Everyone",
+        member: member?.id ?? null,
+        webcal: `webcal://${url.host}${path}`,
+        direct: `${scheme}://${url.host}${path}`,
+      };
+    })
+  );
+
+  return json({ feeds });
 }
 
 async function handleRevoke(
@@ -146,8 +184,13 @@ async function handleFeed(
     return new Response("Upstream error", { status: 502 });
   }
 
-  const ics = await buildIcs(feedId, reservations, {
+  const mine = creds.memberId
+    ? reservations.filter((r) => r.memberId === creds.memberId)
+    : reservations;
+
+  const ics = await buildIcs(feedId, mine, {
     ttlMinutes: Math.round(ttl / 60),
+    name: creds.memberName ? `Life Time — ${creds.memberName}` : "Life Time",
   });
 
   ctx.waitUntil(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalize } from "../src/lifetime";
+import { normalize, rosterFrom } from "../src/lifetime";
 
 // Captured verbatim from a live `ux/web-schedules/v3/reservations` response,
 // Sept 2026. Trimmed to the fields normalize() reads, but not reshaped.
@@ -98,5 +98,58 @@ describe("normalize", () => {
     expect(r.instructor).toBeNull();
     expect(r.status).toBe("confirmed");
     expect(r.memberId).toBeNull();
+  });
+});
+
+describe("rosterFrom", () => {
+  it("unions the three places a member can appear", () => {
+    // Danilo owns the row; the twins only show up as eligible non-registrants.
+    expect(rosterFrom([waitlistedRow])).toEqual([
+      { id: "113746495", name: "Danilo" },
+      { id: "113805697", name: "Diego" },
+      { id: "113805698", name: "Marina" },
+    ]);
+  });
+
+  it("merges across rows, since one event only lists who it is open to", () => {
+    const adultsOnly = {
+      memberId: 113746495,
+      memberName: "Danilo",
+      registration: { registeredMembers: [{ name: "Danilo", id: 113746495 }] },
+    };
+    const openToAll = {
+      memberId: 113805698,
+      memberName: "Marina",
+      registration: {
+        registeredMembers: [{ name: "Marina", id: 113805698 }],
+        unregisteredMembers: [{ name: "Diego", id: 113805697 }],
+      },
+    };
+    expect(rosterFrom([adultsOnly, openToAll]).map((m) => m.name)).toEqual([
+      "Danilo",
+      "Diego",
+      "Marina",
+    ]);
+  });
+
+  it("dedupes a member seen many times", () => {
+    expect(rosterFrom([waitlistedRow, waitlistedRow, waitlistedRow])).toHaveLength(3);
+  });
+
+  it("is empty when the household has no bookings to reveal it", () => {
+    expect(rosterFrom([])).toEqual([]);
+  });
+
+  it("skips entries missing an id or a name", () => {
+    expect(
+      rosterFrom([
+        {
+          memberId: 1,
+          registration: {
+            registeredMembers: [{ name: "Nameless" }, { id: 2, name: "Real" }],
+          },
+        },
+      ])
+    ).toEqual([{ id: "2", name: "Real" }]);
   });
 });

@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import { seal, unseal, newSecret, newFeedId } from "../src/crypto";
 import type { Credentials } from "../src/types";
 
-const creds: Credentials = { username: "someone", password: "hunter2" };
+const creds: Credentials = {
+  username: "someone",
+  password: "hunter2",
+  memberId: "113805698",
+  memberName: "Marina",
+};
 
 describe("seal/unseal", () => {
   it("round-trips credentials", async () => {

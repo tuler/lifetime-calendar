@@ -34,16 +34,29 @@ export interface Session {
   token: string;
   /** The account's SSO id, sent as `X-LTF-SSOID`. */
   sso: string;
-  /** Scopes the reservations query. Best-effort; may be absent. */
-  memberId: string | null;
   /** Epoch millis. */
   expiresAt: number;
+}
+
+/** One person on a household membership. */
+export interface Member {
+  /** Life Time's `memberId`, matching the one on a reservation row. */
+  id: string;
+  /** First name only, as Life Time returns it, e.g. "Marina". */
+  name: string;
 }
 
 export interface Credentials {
   username: string;
   password: string;
   session?: Session;
+  /**
+   * Which household member this feed is for. `null` means everyone the
+   * account can see, which is what a one-person membership gets.
+   */
+  memberId: string | null;
+  /** Only for naming the calendar; `null` alongside a null `memberId`. */
+  memberName: string | null;
 }
 
 /** AES-GCM ciphertext, both fields base64url. */

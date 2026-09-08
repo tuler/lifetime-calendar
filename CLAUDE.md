@@ -35,8 +35,34 @@ service, which the site's own framework bundle calls directly. That is what
   behind Azure API Management, needing the subscription key (`924c03ce...`,
   from the page config, not a secret) plus those two headers. Returns
   `{ results: [...] }`. Confirmed 401 without a valid session.
-- `memberId` scopes the reservations query; `login()` gets it from
-  `GET user-profile/api` (with `X-LTF-CT`) as a best-effort step.
+
+## Family memberships (verified Sept 2026)
+
+Every member has their own login — a minor included. But **the login response
+carries no `memberId`**, only a `partyId`, and the two are different id spaces.
+The profile service that used to supply a `memberId` (`user-profile/api`) now
+401s for auth-v2 sessions on every header shape the site's own axios
+interceptor can produce; `user-profile/profile` is the v2 path but is for
+`Authorization:` bearer sessions only, and the interceptor rewrites it back to
+`api` whenever `X-LTF-CT`/`X-LTF-SSOID` is what you hold. Assume there is no
+session → `memberId` lookup.
+
+It doesn't matter, because **the reservations endpoint returns the whole
+household no matter who signs in**, tagging each row with `memberId` and
+`memberName`. That is Life Time's own behaviour, not a leak — a member sees the
+family's schedule on their site too. So: fetch unscoped, split the rows by
+member locally.
+
+The `memberIds` query param does work, but it takes a single id (a
+comma-separated pair 400s) and is not enforced per-session — any member of a
+household can request any other's. Don't rely on it.
+
+The **roster** (names + ids) is only discoverable from the reservations payload
+itself: `results[].memberId`/`memberName`, plus `registration.registeredMembers`
+and `registration.unregisteredMembers`. Union across every row, because one
+event lists only the members eligible for it. A household with no bookings at
+all therefore reveals no roster — `handleRegister` falls back to a single
+unscoped feed in that case.
 
 **Fallback if the legacy service is retired:** the B2C tenant also has a ROPC
 policy, `B2C_1A_ROPCSignIn`, that works headlessly — POST `grant_type=password`
@@ -61,6 +87,10 @@ Its id_token carries the same two values as the `LTF_SSOID` and
   rather than a 5xx, which Calendar surfaces as an unexplained error.
 - **Feeds are cached in KV** for `CACHE_TTL_SECONDS` so Calendar's polling
   doesn't translate into a Life Time request each time.
+- **One feed per household member**, each with its own feed id and secret, so
+  they are revoked independently. Signup mints them all at once and the ready
+  screen shows a button per person, plus a de-emphasised "Everyone". A solo
+  membership (or an empty roster) gets the single unscoped feed, unchanged.
 
 ## Conventions
 
@@ -128,14 +158,11 @@ credentials as Life Time's, since people have many logins.
 
 ## Next steps
 
-1. The reservation field mapping is still best-effort. `start`, `end`, `eventId`
-   and `location` are confirmed from the SPA's own parsing, but the title,
-   instructor and station names are guesses, which is why `RawReservation`
-   carries several alternative optionals. Once a feed has run for real, compare
-   an event in Calendar against the payload and tighten `normalize()`.
-2. `memberIds` scopes the query to the primary member. If a family member's
-   classes should land on the same feed, try omitting it.
-3. Maybe a Cron Trigger to pre-warm caches, though lazy refresh on poll is
+1. `normalize()` is now checked against a live payload, and `test/lifetime.test.ts`
+   pins it to a real captured row. Still only *waitlisted* rows have been seen:
+   a confirmed booking is assumed to carry `spot` where a waitlisted one carries
+   `spotWaitlist`. Confirm that against a real confirmed booking.
+2. Maybe a Cron Trigger to pre-warm caches, though lazy refresh on poll is
    likely enough at this scale.
 
 ## Out of scope
